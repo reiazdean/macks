@@ -1,0 +1,251 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+</head>
+<body>
+    <div id='toolBar' style="position:absolute; top:0px; left:0px; z-index:1">
+        <button type="button" id="signVerifyButton">SignVerify</button>
+        <button type="button" id="exportCertButton">ExportCert</button>
+        <button type="button" id="exportPubKeyButton">ExportPubKey</button>
+    </div>
+
+    <script>
+
+        var promise_hash = null;
+        var promise_key = null;
+        var aes_key = null;
+        var rsa_pub_key = null;
+        var iv = null;
+
+        var cmdNone = 0x0;
+        var cmdExportPubKey = 0x1;
+        var cmdExportCert = 0x2;
+        var cmdSign = 0x3;
+        var cmdDecrypt = 0x4;
+
+        var algNone = 0x0;
+        var algRSAPkcs = 0x1;
+        var algRSAPkcsSha1 = 0x2;
+        var algRSAPkcsSha256 = 0x3;
+        var algRSAPkcsSha384 = 0x4;
+        var algRSAPkcsSha512 = 0x5;
+        var algECDSA = 0x6;
+
+        var signVerify = document.getElementById('signVerifyButton');
+        var exportCert = document.getElementById('exportCertButton');
+        var exportPubKey = document.getElementById('exportPubKeyButton');
+
+        var myURL = window.URL || window.webkitURL;
+        var crypto = window.crypto || window.msCrypto;
+
+
+        signVerify.addEventListener('click', handleSigntEvent, false);
+        exportCert.addEventListener('click', handleExportCertEvent, false);
+        exportPubKey.addEventListener('click', handleExportPubKeyEvent, false);
+
+       //https://developer.mozilla.org/en-US/docs/Web/API/Crypto/subtle
+
+        function toBase64(buffer) {
+            var binary = '';
+            var bytes = new Uint8Array(buffer);
+            var len = bytes.byteLength;
+            for (var i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return window.btoa(binary);
+        }
+
+        function toByteStream(buffer) {
+            var binary = '';
+            var bytes = new Uint8Array(buffer);
+            var len = bytes.byteLength;
+            for (var i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return binary;
+        }
+
+        function sha384(str) {
+            // We transform the string into an arraybuffer.
+            var buffer = new TextEncoder("utf-8").encode(str);
+            // hash the message
+            return crypto.subtle.digest("SHA-384", buffer).then(function (hash) {
+                return hash;
+            });
+        }
+
+        function createAESkey(digest) {
+            var keyBytes = new Uint8Array(digest, 0, 32);
+            iv = new Uint8Array(digest, 32, 16);
+            const alg = { name: 'AES-CBC', iv: iv };
+            promise_key = crypto.subtle.importKey('raw', keyBytes, alg, false, ['encrypt', 'decrypt']);
+            promise_key.then(function (key) {
+                aes_key = key;
+            });
+
+            promise_key.catch = function (e) {
+                alert(e.message);
+            }
+        }
+
+        function verify(data, signature) {
+            const alg = { name: "RSASSA-PKCS1-v1_5", };
+            var promised_verify = crypto.subtle.verify(alg, rsa_pub_key, signature, data);
+
+            promised_verify.then(function (isvalid) {
+                if (isvalid)
+                    console.log("successfully verified\n");
+                else
+                    console.log("verification failed\n");
+            });
+
+            promised_verify.catch = function (e) {
+                console.log("failed to verify\n");
+            }
+        }
+
+        function createRSApubKey(derKey) {
+            const alg = { name: "RSASSA-PKCS1-v1_5", hash: { name: "SHA-256" } };
+            promise_key = crypto.subtle.importKey('spki', derKey, alg, false, ['verify']);
+            promise_key.then(function (key) {
+                rsa_pub_key = key;
+                console.log("success inporting RSA public key");
+            });
+
+            promise_key.catch = function (e) {
+                alert(e.message);
+            }
+        }
+
+        function passwordToKey(str) {
+            promise_hash = sha384(str);
+            promise_hash.then(function (digest) {
+                createAESkey(digest);
+            });
+
+            promise_hash.catch = function (e) {
+                alert(e.message);
+            }
+        }
+
+        function stringToUint8Array(str) {
+            var bytes = new Uint8Array(str.length);
+            for (var i = 0; i < str.length; i++) {
+                bytes[i] = str.charCodeAt(i);
+            }
+            return bytes;
+        }
+
+        function buildCommand(cmd, alg, keyName, data) {
+            var i = 0;
+            var totalLen = 8 + keyName.length + 1 + data.length;
+
+            var buffer = new ArrayBuffer(totalLen);
+
+            var cmdView = new Uint8Array(buffer, 0, 2);
+            var nameLenView = new Uint16Array(buffer, 2, 1);
+            var dataLenView = new Uint32Array(buffer, 4, 1);
+            var keyNameView = new Uint8Array(buffer, 8, keyName.length + 1);
+            var dataView = new Uint8Array(buffer, 8 + keyName.length + 1, data.length);
+
+            cmdView[0] = cmd;
+            cmdView[1] = alg;
+            nameLenView[0] = keyName.length;
+            dataLenView[0] = data.length;
+
+            for (i = 0; i < keyName.length; i++) {
+                keyNameView[i] = keyName[i];
+            }
+            keyName[keyName.length] = 0x0;//terminating NULL for the ANSI  string
+
+            for (i = 0; i < data.length; i++) {
+                dataView[i] = data[i];
+            }
+
+            var bytes = new Uint8Array(buffer, 0, totalLen);
+
+            return bytes;
+        }
+
+        function buildCommandNoData(cmd, keyName) {
+            var i = 0;
+            var totalLen = 8 + keyName.length + 1;
+
+            var buffer = new ArrayBuffer(totalLen);
+
+            var cmdView = new Uint8Array(buffer, 0, 2);
+            var nameLenView = new Uint16Array(buffer, 2, 1);
+            var dataLenView = new Uint32Array(buffer, 4, 1);
+            var keyNameView = new Uint8Array(buffer, 8, keyName.length + 1);
+
+            cmdView[0] = cmd;
+            cmdView[1] = 0x0;
+            nameLenView[0] = keyName.length;
+            dataLenView[0] = 0;
+
+            for (i = 0; i < keyName.length; i++) {
+                keyNameView[i] = keyName[i];
+            }
+            keyName[keyName.length] = 0x0;//terminating NULL for the ANSI  string
+
+            var bytes = new Uint8Array(buffer, 0, totalLen);
+
+            return bytes;
+        }
+
+        function execute(command, code) {
+            var ws = new WebSocket("ws://127.0.0.1:1990");
+            ws.binaryType = 'arraybuffer';
+
+            ws.onopen = function () {
+                ws.send(command);
+
+                ws.onmessage = function (evt) {
+                    var command_result = null;
+                    command_result = evt.data;
+                    var resView = new Uint8Array(command_result);
+                    var dataView = new Uint8Array(command_result, 1, resView.length - 1);
+
+                    if (resView[0] === 0x0) {
+                        console.log(toByteStream(dataView));
+                    } else {
+                        if (code === cmdExportPubKey) {
+                            console.log(toBase64(command_result));
+                            createRSApubKey(dataView);
+                        } else if (code === cmdExportCert) {
+                            console.log(toBase64(command_result));
+                        } else if (code === cmdSign) {
+                            var data = stringToUint8Array("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+                            verify(data, dataView);
+                        }
+
+                    }
+                };
+            };
+
+            ws.onclose = function () {
+            };
+        }
+
+        function handleSigntEvent(keyName) {
+            var keyName = stringToUint8Array("reiaz");
+            var data = stringToUint8Array("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+            var cmd = buildCommand(cmdSign, algRSAPkcsSha384, keyName, data);
+            execute(cmd, cmdSign);
+        }
+
+        function handleExportCertEvent() {
+            var nameBytes = stringToUint8Array("reiaz");
+            var cmd = buildCommandNoData(cmdExportCert, nameBytes);
+            execute(cmd, cmdExportCert);
+        }
+
+        function handleExportPubKeyEvent() {
+            var nameBytes = stringToUint8Array("reiaz");
+            var cmd = buildCommandNoData(cmdExportPubKey, nameBytes);
+            execute(cmd, cmdExportPubKey);
+        }
+
+    </script>
+</body>
+</html>
