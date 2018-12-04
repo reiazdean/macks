@@ -225,6 +225,7 @@ void wsServer::doWork(int newClientFD)
         uint32_t                   cmdDataLen = 0;
         uint8_t                    bCmd = 0;
         CK_RV                      rv = CKR_DEVICE_ERROR;
+        char*                      pctemp = NULL;
 
         pResult = NULL;
         resultLen = 0;
@@ -238,9 +239,11 @@ void wsServer::doWork(int newClientFD)
         */
         if (szRead < 8)
             goto doneIO;
-
-        memcpy(&keyNameLen, &pcData[2], 2);
-        memcpy(&cmdDataLen, &pcData[4], 4);
+        
+        pctemp = pcData + 2;
+        memcpy(&keyNameLen, pctemp, 2);
+        pctemp = pcData + 4;
+        memcpy(&cmdDataLen, pctemp, 4);
         /*
         Make sure the sizes are sane
         */
