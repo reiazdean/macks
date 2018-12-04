@@ -32,13 +32,13 @@
 using std::string;
 
 wsServer*              wsServer::serverInstance = NULL;
-mutex                  wsServer::myMutex;
-bool                   wsServer::Stopped = false;
 
-
+/******************************************************************************************
+int wsServer::sockRead(int fd, char* pcMessIn, size_t szMess)
+*******************************************************************************************/
 int wsServer::sockRead(int fd, char* pcMessIn, size_t szMess)
 {
-    int      r = -1;
+    int         r = -1;
 #ifdef OS_WIN32
     r = recv(fd, pcMessIn, szMess, 0);
 #else
@@ -48,9 +48,12 @@ int wsServer::sockRead(int fd, char* pcMessIn, size_t szMess)
     return r;
 }
 
+/******************************************************************************************
+int wsServer::sockWrite(int fd, char* pcMessIn, size_t szMess)
+*******************************************************************************************/
 int wsServer::sockWrite(int fd, char* pcMessIn, size_t szMess)
 {
-    int      r = -1;
+    int         r = -1;
 #ifdef OS_WIN32
     r = send(fd, pcMessIn, szMess, 0);
 #else
@@ -62,12 +65,9 @@ int wsServer::sockWrite(int fd, char* pcMessIn, size_t szMess)
 
 /******************************************************************************************
 Function Name:		Constructor/Destructor.
-Parameters:
-Description:
 *******************************************************************************************/
 wsServer::wsServer()
 {
-    stopServer = false;
 }
 
 wsServer::~wsServer()
@@ -76,30 +76,26 @@ wsServer::~wsServer()
 
 
 /******************************************************************************************
-Function Name:		ServerSetup
-Parameters:
-Description:
+void wsServer::serverSetup(int sslPort)
 *******************************************************************************************/
 void wsServer::serverSetup(int sslPort)
 {
-	myWsSock = openSocket(sslPort);
+    myWsSock = openSocket(sslPort);
     if (myWsSock == 0)
     {
-		return;
+        return;
     }
 
     serverListen();
 }
 
 /******************************************************************************************
-Function Name:		OpenSocket
-Parameters:
-Description:
+int wsServer::openSocket(int port)
 *******************************************************************************************/
 int wsServer::openSocket(int port)
 {
-    struct				sockaddr_in address;
-    int					sock, i;
+    struct           sockaddr_in address;
+    int              sock, i;
 
 #ifdef OS_LINUX
     socklen_t addrLen = (socklen_t)sizeof(struct sockaddr_in);
@@ -111,9 +107,9 @@ int wsServer::openSocket(int port)
 
     memset(&address.sin_addr, 0, sizeof(address.sin_addr));
 #ifdef OS_WIN32
-	InetPton(AF_INET, "127.0.0.1", &address.sin_addr.s_addr);
+    InetPton(AF_INET, "127.0.0.1", &address.sin_addr.s_addr);
 #else
-	address.sin_addr.s_addr = inet_addr("127.0.0.1");//use inet_pton or InetPton instead
+    address.sin_addr.s_addr = inet_addr("127.0.0.1");//use inet_pton or InetPton instead
 #endif
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
@@ -128,6 +124,9 @@ int wsServer::openSocket(int port)
     return sock;
 }
 
+/******************************************************************************************
+void wsServer::hashAndEncode(char* pcString, int szString, string& res)
+*******************************************************************************************/
 void wsServer::hashAndEncode(char* pcString, int szString, string& res)
 {
     uint32_t             shalen = 0;
@@ -153,19 +152,22 @@ void wsServer::hashAndEncode(char* pcString, int szString, string& res)
 
 }
 
-/*
-WebSocket doWork
-*/
+/******************************************************************************************
+void wsServer::doWork(int newClientFD)
+*******************************************************************************************/
 void wsServer::doWork(int newClientFD)
 {
-	char                       cMessIn[4096];
-	uint16_t                   keyNameLen = 0;
+    char                       cMessIn[4096];
+    uint16_t                   keyNameLen = 0;
     char*                      pcData = NULL;
-	unsigned long long int     szRead = 0;
+    unsigned long long int     szRead = 0;
     char                       *pcWSkey = NULL;
-	uint8_t*                   pResult = NULL;
-	CK_ULONG                   resultLen = 0;
+    uint8_t*                   pResult = NULL;
+    CK_ULONG                   resultLen = 0;
     int                        r = 0;
+
+    if (newClientFD <= 0)
+        return;
 
     memset(cMessIn, 0, sizeof(cMessIn));
     r = sockRead(newClientFD, (char*)cMessIn, sizeof(cMessIn));
@@ -179,11 +181,11 @@ void wsServer::doWork(int newClientFD)
     }
     else
     {
-        char*				last = NULL;
-        char*				pcKey = NULL;
-        string				key = "";
-        string				response = "";
-        string              base64 = "";
+        char*             last = NULL;
+        char*             pcKey = NULL;
+        string            key = "";
+        string            response = "";
+        string            base64 = "";
 
 #ifdef OS_WIN32
         pcKey = strtok_s(pcWSkey, ": \r\n", &last);
@@ -218,38 +220,38 @@ void wsServer::doWork(int newClientFD)
             goto doneIO;
     }
 
-    {  
-		uint8_t*                   pcCmdData = NULL;
-		uint32_t                   cmdDataLen = 0;
+    {
+        uint8_t*                   pcCmdData = NULL;
+        uint32_t                   cmdDataLen = 0;
         uint8_t                    bCmd = 0;
-		CK_RV                      rv = CKR_DEVICE_ERROR;
-		
-		pResult = NULL;
-		resultLen = 0;
+        CK_RV                      rv = CKR_DEVICE_ERROR;
+
+        pResult = NULL;
+        resultLen = 0;
 
         pcData = readFromWebSocket(newClientFD, szRead);
         if (pcData == NULL)
             goto doneIO;
 
-		/*
-		we should get more than 8 bytes
-		*/
-		if (szRead < 8)
-			goto doneIO;
+        /*
+        we should get more than 8 bytes
+        */
+        if (szRead < 8)
+            goto doneIO;
 
-		memcpy(&keyNameLen, &pcData[2], 2);
-		memcpy(&cmdDataLen, &pcData[4], 4);
-		/*
-		Make sure the sizes are sane
-		*/
-		if((keyNameLen+cmdDataLen+8+1) > szRead)
-			goto doneIO;
+        memcpy(&keyNameLen, &pcData[2], 2);
+        memcpy(&cmdDataLen, &pcData[4], 4);
+        /*
+        Make sure the sizes are sane
+        */
+        if ((keyNameLen + cmdDataLen + 8 + 1) > szRead)
+            goto doneIO;
 
-		/*
-		Make sure there is a NULL at the end of the key name ANSI string
-		*/
-		if(pcData[8 + keyNameLen] != 0x0)
-			goto doneIO;
+        /*
+        Make sure there is a NULL at the end of the key name ANSI string
+        */
+        if (pcData[8 + keyNameLen] != 0x0)
+            goto doneIO;
 
         bCmd = pcData[0];
         switch (bCmd) {
@@ -257,82 +259,74 @@ void wsServer::doWork(int newClientFD)
             free(pcData);
             goto doneIO;
         case 1:
-        {
-			rv = p11util::getPublicKey((CK_BYTE_PTR)pcData + 8, keyNameLen, resultLen, pResult);
-        }
-        break;
+            rv = p11util::getPublicKey((CK_BYTE_PTR)pcData + 8, keyNameLen, resultLen, pResult);
+            break;
         case 2:
-        {
-			rv = p11util::getCertificate((CK_BYTE_PTR)pcData + 8, keyNameLen, resultLen, pResult);
-        }
-        break;
+            rv = p11util::getCertificate((CK_BYTE_PTR)pcData + 8, keyNameLen, resultLen, pResult);
+            break;
         case 3:
-		{
-			rv = p11util::sign((CK_BYTE_PTR)pcData + 8, keyNameLen, CKM_SHA256_RSA_PKCS, (CK_BYTE_PTR)pcData + 8 + keyNameLen + 1, cmdDataLen, resultLen, pResult);
-		}
-		break;
+            rv = p11util::sign((CK_BYTE_PTR)pcData + 8, keyNameLen, CKM_SHA256_RSA_PKCS, (CK_BYTE_PTR)pcData + 8 + keyNameLen + 1, cmdDataLen, resultLen, pResult);
+            break;
         default:
             break;
         }
 
-		if ((rv == CKR_OK) && pResult)
-		{
-			uint8_t*  pTemp = (uint8_t*)calloc(resultLen+1, 1);
-			if (pTemp == NULL)
-				goto doneIO;
-			memcpy(pTemp + 1, pResult, resultLen);
-			pTemp[0] = 0x01;//one is success
-			writeToWebSocket(newClientFD, (char*)pTemp, resultLen+1, false);
-			free(pTemp);
-		}
-		else
-		{
-			char      cBuffer[128];
-			memset(cBuffer, 0, sizeof(cBuffer));
+        if ((rv == CKR_OK) && pResult)
+        {
+            uint8_t*  pTemp = (uint8_t*)calloc(resultLen + 1, 1);
+            if (pTemp == NULL)
+                goto doneIO;
+            memcpy(pTemp + 1, pResult, resultLen);
+            pTemp[0] = 0x01;//one is success
+            writeToWebSocket(newClientFD, (char*)pTemp, resultLen + 1, false);
+            free(pTemp);
+        }
+        else
+        {
+            char      cBuffer[128];
+            memset(cBuffer, 0, sizeof(cBuffer));
 #ifdef OS_WIN32
-			strcpy_s(cBuffer + 1, sizeof(cBuffer)-2, p11util::getErrorString(rv));//the first byte remains zero to indicate an error and the error string is written to the end
+            strcpy_s(cBuffer + 1, sizeof(cBuffer) - 2, p11util::getErrorString(rv));//the first byte remains zero to indicate an error and the error string is written to the end
 #else
-			strcpy(cBuffer + 1, p11util::getErrorString(rv));//the first byte remains zero to indicate an error and the error string is written to the end
+            strcpy(cBuffer + 1, p11util::getErrorString(rv));//the first byte remains zero to indicate an error and the error string is written to the end
 #endif
-			writeToWebSocket(newClientFD, (char*)cBuffer, sizeof(cBuffer), false);
-		}
+            writeToWebSocket(newClientFD, (char*)cBuffer, sizeof(cBuffer), false);
+        }
     }
 
 doneIO:
 
-	if (pcData)
-		free(pcData);
+    if (pcData)
+        free(pcData);
 
-	if (pResult)
-		free(pResult);
+    if (pResult)
+        free(pResult);
 
     closeSocket(newClientFD);
 
-	return;
+    return;
 }
 
 /******************************************************************************************
-Function Name:		ServerListen
-Parameters:
-Description:
+void wsServer::serverListen()
 *******************************************************************************************/
 void wsServer::serverListen()
 {
-    int                  conn;
-    struct               sockaddr_in address;
+    int                   conn;
+    struct                sockaddr_in address;
 
-#ifdef OS_LINUX
-    socklen_t addrLen = (socklen_t)sizeof(struct sockaddr_in);
-#else
+#ifdef OS_WIN32
     int addrLen = (int)sizeof(struct sockaddr_in);
+#else
+    socklen_t addrLen = (socklen_t)sizeof(struct sockaddr_in);
 #endif
 
     listen(myWsSock, 64);
 
     while (1)
     {
-		conn = accept(myWsSock, (struct sockaddr*)&address, &addrLen);
-		doWork(conn);
+        conn = accept(myWsSock, (struct sockaddr*)&address, &addrLen);
+        doWork(conn);
     }
 
     closeSocket(myWsSock);
@@ -341,9 +335,7 @@ void wsServer::serverListen()
 }
 
 /******************************************************************************************
-Function Name:		CloseSocket
-Parameters:
-Description:
+void wsServer::closeSocket(int sock)
 *******************************************************************************************/
 void wsServer::closeSocket(int sock)
 {
@@ -354,18 +346,21 @@ void wsServer::closeSocket(int sock)
 #endif
 }
 
+/******************************************************************************************
+char* wsServer::readFromWebSocket(int webSock, unsigned long long int &szRead)
+*******************************************************************************************/
 char* wsServer::readFromWebSocket(int webSock, unsigned long long int &szRead)
 {
-    bool						bRc = false;
-    int							r = 0;
-    char						c = 0;
-    unsigned short				us = 0;
-    unsigned long long int		ll = 0;
-    unsigned long long int		len = 0;
-    char						mask[4];
-    char*						pcData = NULL;
-    unsigned long long int		i = 0;
-    bool						bMore = false;
+    bool                                    bRc = false;
+    int                                     r = 0;
+    char                                    c = 0;
+    unsigned short                          us = 0;
+    unsigned long long int                  ll = 0;
+    unsigned long long int                  len = 0;
+    char                                    mask[4];
+    char*                                   pcData = NULL;
+    unsigned long long int                  i = 0;
+    bool                                    bMore = false;
 
     szRead = 0;
 
@@ -418,21 +413,34 @@ char* wsServer::readFromWebSocket(int webSock, unsigned long long int &szRead)
 
 doneReadData:
 
-    //if( bRc && bMore )
-    //	pcData = ReadData( );
+    /* 4_U_2_DO
+       If there is more data to read, then recursively call
+       and append the output buffer!
+
+    if (bRc && bMore)
+    {
+        char*                    pcMoreData = NULL;
+        unsigned long long int   szMore = 0;
+
+        pcMoreData = readFromWebSocket( webSock, szMore);
+    }
+    */
 
     return pcData;
 }
 
+/******************************************************************************************
+bool wsServer::writeToWebSocket(int webSock, char* pcData, int szData, bool isTextTransfer)
+*******************************************************************************************/
 bool wsServer::writeToWebSocket(int webSock, char* pcData, int szData, bool isTextTransfer)
 {
-    bool						bRc = false;
-    char						cChunk[4 + WS_CHUNK_SZ];
-    int							iPieces = 0;
-    unsigned short				usLastSz = 0;
-    int							i = 0;
-    char*						pcTemp = pcData;
-    short						usSz = htons(WS_CHUNK_SZ);
+    bool                        bRc = false;
+    char                        cChunk[4 + WS_CHUNK_SZ];
+    int                         iPieces = 0;
+    unsigned short              usLastSz = 0;
+    int                         i = 0;
+    char*                       pcTemp = pcData;
+    short                       usSz = htons(WS_CHUNK_SZ);
 
     if (pcData == NULL)
         goto doneWrite;
