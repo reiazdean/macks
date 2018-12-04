@@ -97,10 +97,10 @@ int wsServer::openSocket(int port)
     struct           sockaddr_in address;
     int              sock, i;
 
-#ifdef OS_LINUX
-    socklen_t addrLen = (socklen_t)sizeof(struct sockaddr_in);
-#else
+#ifdef OS_WIN32
     int addrLen = (int)sizeof(struct sockaddr_in);
+#else
+    socklen_t addrLen = (socklen_t)sizeof(struct sockaddr_in);
 #endif
 
     sock = socket(AF_INET, SOCK_STREAM, 0);
