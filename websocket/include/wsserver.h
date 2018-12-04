@@ -2,15 +2,9 @@
 #include <stdint.h>
 #include <string>
 
-
 using std::string;
 
 #define				WS_CHUNK_SZ			0x8000
-
-typedef struct {
-    int       sock;
-} IOThreadArgs;
-
 
 class wsServer {
     //************   Cons/Destruction   ***************
