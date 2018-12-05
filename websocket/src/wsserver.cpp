@@ -31,6 +31,8 @@
 
 using std::string;
 
+static char            cChunk[4 + WS_CHUNK_SZ];
+
 wsServer*              wsServer::serverInstance = NULL;
 
 /******************************************************************************************
@@ -228,7 +230,6 @@ void wsServer::doWork(int newClientFD)
     {
         uint8_t*                   pcCmdData = NULL;
         uint32_t                   cmdDataLen = 0;
-        crypto_ops                 crypto_op = OP_NONE;
         CK_RV                      rv = CKR_DEVICE_ERROR;
         char*                      pctemp = NULL;
 
@@ -261,8 +262,7 @@ void wsServer::doWork(int newClientFD)
         if (pcData[8 + keyNameLen] != 0x0)
             goto doneIO;
 
-        crypto_op = (crypto_ops)pcData[0];
-        switch (crypto_op) {
+        switch ((uint8_t)pcData[0]) {
         case OP_NONE:
             free(pcData);
             goto doneIO;
@@ -275,9 +275,8 @@ void wsServer::doWork(int newClientFD)
         case OP_SIGN:
         {
             CK_MECHANISM_TYPE          mech = 0;
-            crypto_algs                crypto_alg = (crypto_algs)pcData[1];
             rv = CKR_OK;
-            switch (crypto_alg) {
+            switch ((uint8_t)pcData[1]) {
             case ALG_RSA_PKCS:
                 mech = CKM_RSA_PKCS;
                 break;
@@ -476,7 +475,6 @@ bool wsServer::writeToWebSocket(int webSock, char* pcData, int szData, bool isTe
 bool wsServer::writeToWebSocket(int webSock, char* pcData, int szData, bool isTextTransfer)
 {
     bool                        bRc = false;
-    char                        cChunk[4 + WS_CHUNK_SZ];
     int                         iPieces = 0;
     unsigned short              usLastSz = 0;
     int                         i = 0;
