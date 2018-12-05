@@ -263,36 +263,36 @@ void wsServer::doWork(int newClientFD)
             goto doneIO;
 
         switch ((uint8_t)pcData[0]) {
-        case OP_NONE:
+        case crypto_ops::OP_NONE:
             free(pcData);
             goto doneIO;
-        case OP_EXPORT_PUB_KEY:
+        case crypto_ops::OP_EXPORT_PUB_KEY:
             rv = p11util::getPublicKey((CK_BYTE_PTR)pcData + 8, keyNameLen, resultLen, pResult);
             break;
-        case OP_EXPORT_CERTIFICATE:
+        case crypto_ops::OP_EXPORT_CERTIFICATE:
             rv = p11util::getCertificate((CK_BYTE_PTR)pcData + 8, keyNameLen, resultLen, pResult);
             break;
-        case OP_SIGN:
+        case crypto_ops::OP_SIGN:
         {
             CK_MECHANISM_TYPE          mech = 0;
             rv = CKR_OK;
             switch ((uint8_t)pcData[1]) {
-            case ALG_RSA_PKCS:
+            case crypto_algs::ALG_RSA_PKCS:
                 mech = CKM_RSA_PKCS;
                 break;
-            case ALG_RSA_PKCS_SHA1:
+            case  crypto_algs::ALG_RSA_PKCS_SHA1:
                 mech = CKM_SHA1_RSA_PKCS;
                 break;
-            case ALG_RSA_PKCS_SHA256:
+            case  crypto_algs::ALG_RSA_PKCS_SHA256:
                 mech = CKM_SHA256_RSA_PKCS;
                 break;
-            case ALG_RSA_PKCS_SHA384:
+            case  crypto_algs::ALG_RSA_PKCS_SHA384:
                 mech = CKM_SHA384_RSA_PKCS;
                 break;
-            case ALG_RSA_PKCS_SHA512:
+            case  crypto_algs::ALG_RSA_PKCS_SHA512:
                 mech = CKM_SHA512_RSA_PKCS;
                 break;
-            case ALG_ECDSA:
+            case  crypto_algs::ALG_ECDSA:
                 mech = CKM_ECDSA;
                 break;
             default:
