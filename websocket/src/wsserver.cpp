@@ -154,6 +154,11 @@ void wsServer::hashAndEncode(char* pcString, int szString, string& res)
 
 /******************************************************************************************
 void wsServer::doWork(int newClientFD)
+
+WebSocket specification
+https://tools.ietf.org/html/rfc6455#section-5.1
+https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers
+
 *******************************************************************************************/
 void wsServer::doWork(int newClientFD)
 {
@@ -223,7 +228,7 @@ void wsServer::doWork(int newClientFD)
     {
         uint8_t*                   pcCmdData = NULL;
         uint32_t                   cmdDataLen = 0;
-        uint8_t                    bCmd = 0;
+        crypto_ops                 crypto_op = OP_NONE;
         CK_RV                      rv = CKR_DEVICE_ERROR;
         char*                      pctemp = NULL;
 
@@ -256,20 +261,53 @@ void wsServer::doWork(int newClientFD)
         if (pcData[8 + keyNameLen] != 0x0)
             goto doneIO;
 
-        bCmd = pcData[0];
-        switch (bCmd) {
-        case 0:
+        crypto_op = (crypto_ops)pcData[0];
+        switch (crypto_op) {
+        case OP_NONE:
             free(pcData);
             goto doneIO;
-        case 1:
+        case OP_EXPORT_PUB_KEY:
             rv = p11util::getPublicKey((CK_BYTE_PTR)pcData + 8, keyNameLen, resultLen, pResult);
             break;
-        case 2:
+        case OP_EXPORT_CERTIFICATE:
             rv = p11util::getCertificate((CK_BYTE_PTR)pcData + 8, keyNameLen, resultLen, pResult);
             break;
-        case 3:
-            rv = p11util::sign((CK_BYTE_PTR)pcData + 8, keyNameLen, CKM_SHA256_RSA_PKCS, (CK_BYTE_PTR)pcData + 8 + keyNameLen + 1, cmdDataLen, resultLen, pResult);
+        case OP_SIGN:
+        {
+            CK_MECHANISM_TYPE          mech = 0;
+            crypto_algs                crypto_alg = (crypto_algs)pcData[1];
+            rv = CKR_OK;
+            switch (crypto_alg) {
+            case ALG_RSA_PKCS:
+                mech = CKM_RSA_PKCS;
+                break;
+            case ALG_RSA_PKCS_SHA1:
+                mech = CKM_SHA1_RSA_PKCS;
+                break;
+            case ALG_RSA_PKCS_SHA256:
+                mech = CKM_SHA256_RSA_PKCS;
+                break;
+            case ALG_RSA_PKCS_SHA384:
+                mech = CKM_SHA384_RSA_PKCS;
+                break;
+            case ALG_RSA_PKCS_SHA512:
+                mech = CKM_SHA512_RSA_PKCS;
+                break;
+            case ALG_ECDSA:
+                mech = CKM_ECDSA;
+                break;
+            default:
+                rv = CKR_MECHANISM_INVALID;
+                break;
+            }
+
+            if (rv == CKR_OK)
+            {
+                rv = p11util::sign((CK_BYTE_PTR)pcData + 8, keyNameLen, mech, (CK_BYTE_PTR)pcData + 8 + keyNameLen + 1, cmdDataLen, resultLen, pResult);
+            }
+
             break;
+        }
         default:
             break;
         }

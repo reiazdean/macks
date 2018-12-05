@@ -249,7 +249,7 @@
         function signAndVerify(keyname, data2Sign) {
             var nameBytes = stringToUint8Array(keyname);
             var data = stringToUint8Array(data2Sign);
-            var cmd = buildCommand(cmdSign, algRSAPkcsSha384, nameBytes, data);
+            var cmd = buildCommand(cmdSign, algRSAPkcsSha256, nameBytes, data);
             execute(cmd, cmdSign);
         }
 
