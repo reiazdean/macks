@@ -10,7 +10,7 @@
 #ifdef OS_WIN32
 #define           LIB_NAME         "C:\\Program Files\\Macks\\MacksP11.dll"
 #else
-#define           LIB_NAME         "/opt/rdc/macks/libmackspkcs11.so"
+#define           LIB_NAME         "/opt/rdc/macksp11/libmackspkcs11.so"
 #endif
 
 #define           NUM_HANDLES          100

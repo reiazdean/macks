@@ -26,7 +26,7 @@
 #include <sys/stat.h>
 #include <stdio.h>
 #include <string.h>
-#include "wsServer.h"
+#include "wsserver.h"
 #include "p11util.h"
 
 using std::string;
@@ -199,7 +199,7 @@ void wsServer::doWork(int newClientFD)
         if (pcKey)
             pcKey = strtok_s(NULL, ": \r\n", &last);
 #else
-        pcKey = strtok_r(pcIn, ": \r\n", &last);
+        pcKey = strtok_r(pcWSkey, ": \r\n", &last);
         if (pcKey)
             pcKey = strtok_r(NULL, ": \r\n", &last);
 #endif
